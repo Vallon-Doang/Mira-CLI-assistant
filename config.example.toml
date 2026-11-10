@@ -1,0 +1,30 @@
+# MIRA example configuration.
+# Copy to ~/.config/mira/config.toml, or set MIRA_CONFIG to use another path.
+
+[model]
+name = "gemma4:e4b-it-q4_K_M"
+temperature = 0.2
+num_predict = 256
+num_ctx = 4096
+keep_alive = "5m"
+# Explain mode uses its own generation limits.
+explain_temperature = 0.3
+explain_num_predict = 768
+
+[ollama]
+host = "http://127.0.0.1:11434"
+stream = true
+timeout = 120
+
+[behavior]
+default_mode = "oneshot"
+thinking = false
+context_detection = true
+cheatsheet = true
+direct_answers = true
+
+[conversation]
+max_messages = 12
+
+[retrieval]
+max_results = 3
