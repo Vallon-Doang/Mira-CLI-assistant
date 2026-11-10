@@ -47,22 +47,22 @@ Environment for this run:
 ```text
 QUESTION                                       TTFT ms  TOTAL ms    TOK/S  PROMPT   EVAL  RETR
 ----------------------------------------------------------------------------------------------
-Where is Apache's configuration file on F…      1767.1    5123.6    10.73     507     36   yes
-How do I restart Apache?                        2152.0    4476.8    10.32     545     24   yes
-How do I check listening ports?                 1500.2    7083.6    11.10     422     62   yes
-How do I inspect systemd logs?                  1596.2    6422.3     9.53     471     46   yes
-How do I allow HTTP through firewalld?          1977.2    5821.8    12.48     554     48   yes
-How do I check NVIDIA GPU usage?                1490.4    4779.0     7.30     433     24   yes
-How do I see my current Git branch?             1448.3    4253.2     9.63     407     27   yes
-How do I find Python files recursively?         1463.5    4754.1    10.33     418     34   yes
-How do I check available disk space?            1671.0    4728.8     9.48     495     29   yes
-How do I inspect an Ollama service failur…      1995.9    6858.3    11.11     566     54   yes
+Where is Apache's configuration file on F…      1774.6    5633.1    11.40     512     44   yes
+How do I restart Apache?                        2148.1    4215.0    10.16     550     21   yes
+How do I check listening ports?                 1499.7    7116.4    10.50     427     59   yes
+How do I inspect systemd logs?                  1595.0    8222.1     9.96     476     66   yes
+How do I allow HTTP through firewalld?          2006.2    5855.9    12.47     559     48   yes
+How do I check NVIDIA GPU usage?                1495.1    4790.0     8.19     438     27   yes
+How do I see my current Git branch?             1445.9    4238.4     9.67     412     27   yes
+How do I find Python files recursively?         1467.2    5020.3     9.57     423     34   yes
+How do I check available disk space?            1672.5    4748.3     9.43     500     29   yes
+How do I inspect an Ollama service failur…      2004.5    6882.5    10.86     571     53   yes
 
 Model: gemma4:e4b-it-q4_K_M
 Questions: 10
-Mean TTFT: 1706.18 ms
-Mean total: 5430.15 ms
-Mean tokens/s: 10.20
+Mean TTFT: 1710.88 ms
+Mean total: 5672.20 ms
+Mean tokens/s: 10.22
 ```
 
 ## Interpreting the numbers
