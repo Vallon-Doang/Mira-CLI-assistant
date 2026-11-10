@@ -3,7 +3,9 @@
 The benchmark script drives the real Ollama API. It measures the full local
 pipeline: environment snapshot, optional retrieval, prompt construction, model
 generation, and streaming. It does **not** use the deterministic fast path, so
-every question exercises the model.
+every question exercises the model. It also does not use `--execute`; command
+execution is measured separately and its runtime depends entirely on the
+command.
 
 ## Running
 

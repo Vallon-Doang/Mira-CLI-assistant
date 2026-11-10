@@ -46,6 +46,12 @@ max_messages = 12
 
 [retrieval]
 max_results = 3
+
+[execution]
+enabled = false
+timeout = 30
+max_output = 20000
+allow_destructive = false
 """
 
 
@@ -87,12 +93,21 @@ class RetrievalConfig:
 
 
 @dataclass
+class ExecutionConfig:
+    enabled: bool = False
+    timeout: float = 30.0
+    max_output: int = 20_000
+    allow_destructive: bool = False
+
+
+@dataclass
 class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
     behavior: BehaviorConfig = field(default_factory=BehaviorConfig)
     conversation: ConversationConfig = field(default_factory=ConversationConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
+    execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     path: Path = field(default_factory=lambda: config_path())
 
     def render(self) -> str:
@@ -122,6 +137,11 @@ class Config:
             f"max_messages = {self.conversation.max_messages}\n"
             "\n[retrieval]\n"
             f"max_results = {self.retrieval.max_results}\n"
+            "\n[execution]\n"
+            f"enabled = {_toml_bool(self.execution.enabled)}\n"
+            f"timeout = {_fmt_number(self.execution.timeout)}\n"
+            f"max_output = {self.execution.max_output}\n"
+            f"allow_destructive = {_toml_bool(self.execution.allow_destructive)}\n"
         )
 
 
@@ -186,6 +206,12 @@ def load_config(path: Path | None = None, create: bool = True) -> Config:
             retrieval=RetrievalConfig(
                 max_results=_int(data, "retrieval", "max_results", 3),
             ),
+            execution=ExecutionConfig(
+                enabled=_bool(data, "execution", "enabled", False),
+                timeout=_float(data, "execution", "timeout", 30.0),
+                max_output=_int(data, "execution", "max_output", 20_000),
+                allow_destructive=_bool(data, "execution", "allow_destructive", False),
+            ),
             path=cfg_path,
         )
     except ConfigError:
@@ -240,6 +266,14 @@ def validate_config(cfg: Config) -> None:
     if not 1 <= cfg.retrieval.max_results <= 20:
         raise ConfigError(
             f"Invalid configuration in {path}: retrieval.max_results must be between 1 and 20"
+        )
+    if not 1 <= cfg.execution.timeout <= 600:
+        raise ConfigError(
+            f"Invalid configuration in {path}: execution.timeout must be between 1 and 600"
+        )
+    if not 1_000 <= cfg.execution.max_output <= 1_000_000:
+        raise ConfigError(
+            f"Invalid configuration in {path}: execution.max_output must be between 1000 and 1000000"
         )
 
 

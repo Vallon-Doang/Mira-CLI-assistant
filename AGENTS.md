@@ -2,7 +2,8 @@
 
 MIRA is a local, offline-first Linux CLI assistant backed by Ollama. It answers
 one question at a time, optionally explains in depth, or holds a bounded
-conversation. It never executes commands.
+conversation. Command execution is opt-in and guarded by a deterministic risk
+policy; command output is never sent back to the model.
 
 ## Quick commands
 
@@ -13,9 +14,13 @@ mira "How do I check disk space?"
 mira --debug "How do I allow HTTP through firewalld?"
 mira --explain "How does firewalld work?"
 mira -converse
+mira --execute "How much disk space is free?"
+mira --doctor
+python scripts/validate_knowledge.py
 pytest
 MIRA_INTEGRATION=1 pytest -m integration
 python scripts/benchmark.py
+./scripts/release.sh
 ```
 
 `mira` must work from any directory after installation. Knowledge ships as
@@ -32,9 +37,13 @@ package data; `~/.config/mira/knowledge/*.md` overrides bundled entries.
 | `src/mira/prompt_builder.py` | system prompt, context/reference assembly, token budget |
 | `src/mira/ollama_client.py` | `/api/chat`, `/api/tags`, `/api/show`, streaming, errors |
 | `src/mira/conversation.py` | bounded history and REPL commands |
+| `src/mira/execution.py` | command extraction, deterministic risk policy, execution |
+| `src/mira/knowledge_validation.py` | knowledge and packaged-copy validation |
 | `src/mira/output.py` | streaming, ANSI/TTY rules, JSON, debug-to-stderr |
 | `src/mira/errors.py` | exception types mapped to exit codes |
 | `scripts/benchmark.py` | live latency/throughput benchmark |
+| `scripts/validate_knowledge.py` | knowledge validation entry point |
+| `scripts/release.sh` | wheel/sdist build and clean-venv smoke test |
 | `knowledge/*.md` | curated cheatsheets (also copied into the package) |
 
 ## Hard constraints
@@ -42,7 +51,11 @@ package data; `~/.config/mira/knowledge/*.md` overrides bundled entries.
 - Python 3.12+; **no runtime dependencies**. Use the standard library
   (`urllib`, `tomllib`, `http.server` in tests). `pytest` is dev-only.
 - Never add LangChain/CrewAI/vector databases/embeddings. No cloud APIs.
-- Never execute a generated command. No subprocess execution of user output.
+- Command execution is opt-in (`--execute` or `[execution] enabled = true`).
+  Safe read-only commands may auto-run; everything else needs confirmation.
+  Destructive commands additionally require `--allow-destructive`. Shell
+  features use `bash -lc` only after a warning and confirmation. Never feed
+  command output back to the model.
 - Never send environment variable values, SSH keys, git remotes, or absolute
   workspace paths to the model.
 - No silent model downloads. No auto-installing packages or starting services.
@@ -76,10 +89,13 @@ the command or path first. Add a `Warning:` line for risky actions.
 
 ## Conventions
 
-- Exit codes: 0 success, 1 generic, 2 usage/config, 3 Ollama unreachable,
-  4 model missing, 130 interrupted.
+- Exit codes: 0 success, 1 generic/command refusal, 2 usage/config, 3 Ollama
+  unreachable, 4 model missing, 130 interrupted.
 - User-facing errors start with `MIRA:` and never include tracebacks unless
   `--debug`.
+- Execution: safe read-only commands auto-run; moderate commands confirm;
+  destructive commands need `--allow-destructive`; `--yes` skips safe/moderate
+  confirmation only. Never parse commands from fast-path cheatsheets.
 - Keep responses under ~100 words in one-shot mode; explain mode may be longer.
 - Tests must not require Ollama unless marked `integration`.
 - Prefer deterministic Python over LLM reasoning for environment facts,

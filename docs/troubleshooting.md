@@ -140,6 +140,66 @@ mode for quick commands.
 130; in conversation mode it stays in the session. Partial text already printed
 is not saved to history.
 
+## A proposed command was not executed
+
+Execution is opt-in. Check that you passed `--execute` or set:
+
+```toml
+[execution]
+enabled = true
+```
+
+Then check the status:
+
+- `Not executed: Command requires confirmation` — the command is moderate or
+  destructive and MIRA had no TTY. Rerun interactively, or add `--yes` for
+  moderate commands.
+- `Not executed: Destructive command blocked` — add `--allow-destructive` if
+  you understand the command. Add `--yes` as well for non-interactive use.
+- `multiple COMMAND lines were proposed` — the model proposed more than one
+  command. MIRA refuses ambiguous proposals. Rephrase the question.
+- `the code block must contain exactly one command` — the model returned a
+  multi-line block. Ask for one command.
+
+`--execute` disables streaming for that turn so the command can be parsed before
+display. The answer and command output are still printed normally.
+
+## The command timed out or produced no output
+
+The default timeout is 30 seconds and the output cap is 20,000 characters per
+stream:
+
+```toml
+[execution]
+timeout = 60
+max_output = 50000
+```
+
+Interactive commands and password prompts are not supported because stdin is
+`/dev/null`. `sudo` is classified as destructive and may still fail if it needs
+a password. Run interactive or privileged commands yourself.
+
+## Command output contains sensitive information
+
+MIRA prints command output locally but never sends it back to the model. Be
+careful when redirecting MIRA output to logs or sharing it. Commands you approve
+run with your user's permissions.
+
+## `mira --doctor` reports failures
+
+```bash
+mira --doctor
+mira --doctor --json
+```
+
+- `[FAIL] Ollama API` — start Ollama and check `[ollama] host` in the config.
+- `[FAIL] Model` — run `mira --list-models` and pull the configured model.
+- `[FAIL] Knowledge` — run `python scripts/validate_knowledge.py` from the
+  repository, or reinstall the package so bundled knowledge is present.
+- `[WARN] GPU` — `nvidia-smi` is missing or returned no data. This is not fatal.
+- `[WARN] Execution` — execution is disabled. Use `--execute` or enable it in
+  the config.
+
 ## Configuration is malformed
 
 MIRA reports the file path and the TOML error, then exits with code 2.
@@ -236,6 +296,7 @@ Collect:
 
 ```bash
 mira --version
+mira --doctor
 mira --show-config
 mira --debug "your question" 2>debug.log
 journalctl -u ollama -n 50 --no-pager

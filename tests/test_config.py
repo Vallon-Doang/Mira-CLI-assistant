@@ -22,6 +22,9 @@ def test_defaults_are_created(tmp_path: Path) -> None:
     assert cfg.ollama.host == "http://127.0.0.1:11434"
     assert cfg.behavior.direct_answers is True
     assert cfg.conversation.max_messages == 12
+    assert cfg.execution.enabled is False
+    assert cfg.execution.timeout == 30.0
+    assert cfg.execution.max_output == 20_000
     assert cfg.path == path
 
 
@@ -57,6 +60,37 @@ def test_invalid_max_messages(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text("[conversation]\nmax_messages = 1\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="max_messages"):
+        load_config(path)
+
+
+def test_execution_settings_load_and_render(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "[execution]\nenabled = true\ntimeout = 45\nmax_output = 5000\n"
+        "allow_destructive = true\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert cfg.execution.enabled is True
+    assert cfg.execution.timeout == 45.0
+    assert cfg.execution.max_output == 5000
+    assert cfg.execution.allow_destructive is True
+    rendered = cfg.render()
+    assert "[execution]" in rendered
+    assert "timeout = 45" in rendered
+
+
+def test_invalid_execution_timeout(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[execution]\ntimeout = 0\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="execution.timeout"):
+        load_config(path)
+
+
+def test_invalid_execution_max_output(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[execution]\nmax_output = 10\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="execution.max_output"):
         load_config(path)
 
 

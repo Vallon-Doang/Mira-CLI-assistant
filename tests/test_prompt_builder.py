@@ -62,6 +62,14 @@ def test_no_context_or_reference() -> None:
     assert "Reference information" not in system
 
 
+def test_execution_prompt_is_opt_in() -> None:
+    without, _ = build_messages("hello", None, [])
+    with_execution, _ = build_messages("hello", None, [], execution_enabled=True)
+    assert "COMMAND:" not in without[0]["content"]
+    assert "COMMAND:" in with_execution[0]["content"]
+    assert "more than one command" in with_execution[0]["content"]
+
+
 def test_history_is_included_and_starts_with_user() -> None:
     history = [
         {"role": "assistant", "content": "orphan"},

@@ -28,3 +28,13 @@ max_messages = 12
 
 [retrieval]
 max_results = 3
+
+[execution]
+# Command execution is opt-in. --execute enables it for one invocation.
+enabled = false
+# Seconds before the command is killed.
+timeout = 30
+# Maximum characters captured per stream (stdout and stderr separately).
+max_output = 20000
+# Destructive commands still need --allow-destructive unless this is true.
+allow_destructive = false

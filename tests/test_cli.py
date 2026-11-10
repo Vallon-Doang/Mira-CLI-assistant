@@ -26,7 +26,7 @@ def test_single_dash_modes() -> None:
 
 def test_version(capsys) -> None:
     assert main(["--version"]) == 0
-    assert "mira 0.1.0" in capsys.readouterr().out
+    assert "mira 0.2.0" in capsys.readouterr().out
 
 
 def test_no_question_on_tty(mira_config, monkeypatch, capsys) -> None:
@@ -125,6 +125,8 @@ def test_show_config_json(mira_config, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
     assert payload["config"]["model"]["name"] == "test-model:latest"
+    assert payload["config"]["execution"]["enabled"] is False
+    assert payload["config"]["execution"]["timeout"] == 30.0
     assert payload["path"] == str(mira_config)
 
 
@@ -220,3 +222,211 @@ def test_query_from_stdin(mira_config, fake_ollama, monkeypatch, capsys) -> None
     monkeypatch.setattr("sys.stdin", io.StringIO("hello from stdin\n"))
     assert main([]) == 0
     assert "stdin answer" in capsys.readouterr().out
+
+
+def test_converse_does_not_use_fast_path(mira_config, fake_ollama, monkeypatch, capsys) -> None:
+    fake_ollama.chat_text = "model answer in conversation"
+    monkeypatch.setattr("sys.stdin", io.StringIO("/exit\n"))
+    code = main(["-converse", "How do I check available disk space?"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "model answer in conversation" in captured.out
+    assert "(local cheatsheet)" not in captured.out
+    assert fake_ollama.last_chat_payload is not None
+
+
+def test_execute_safe_command_auto_runs(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "Here is the check.\nCOMMAND: printf hello"
+    code = main(["--execute", "--no-cheatsheet", "check something"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Here is the check." in captured.out
+    assert "Command: printf hello" in captured.out
+    assert "hello" in captured.out
+    assert "Exit code: 0" in captured.out
+    assert fake_ollama.last_chat_payload["stream"] is False
+
+
+def test_execute_moderate_with_yes(mira_config, fake_ollama, tmp_path: Path, capsys) -> None:
+    target = tmp_path / "created-by-mira"
+    fake_ollama.chat_text = f"COMMAND: touch {target}"
+    code = main(["--execute", "--yes", "--no-cheatsheet", "create it"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert target.exists()
+    assert "Risk: moderate" in captured.out
+
+
+def test_execute_moderate_without_yes_needs_confirmation(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "COMMAND: touch /tmp/mira-should-not-exist"
+    code = main(["--execute", "--no-cheatsheet", "create it"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "Not executed" in captured.out
+    assert "confirmation" in captured.out
+
+
+def test_execute_destructive_is_blocked(mira_config, fake_ollama, tmp_path: Path, capsys) -> None:
+    target = tmp_path / "missing"
+    fake_ollama.chat_text = f"COMMAND: rm -rf {target}"
+    code = main(["--execute", "--yes", "--no-cheatsheet", "remove it"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "Destructive command blocked" in captured.out
+    assert target.exists() is False
+
+
+def test_execute_destructive_with_allow_and_yes(mira_config, fake_ollama, tmp_path: Path, capsys) -> None:
+    target = tmp_path / "missing"
+    fake_ollama.chat_text = f"COMMAND: rm -rf {target}"
+    code = main(
+        ["--execute", "--yes", "--allow-destructive", "--no-cheatsheet", "remove it"]
+    )
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Risk: destructive" in captured.out
+    assert "Exit code: 0" in captured.out
+
+
+def test_execute_shell_pipeline_with_yes(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "COMMAND: printf 'a\\nb\\n' | wc -l"
+    code = main(["--execute", "--yes", "--no-cheatsheet", "count lines"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Shell features: pipe" in captured.out
+    assert "2" in captured.out
+
+
+def test_execute_json_safe_command(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "COMMAND: printf hello"
+    code = main(["--json", "--execute", "--no-cheatsheet", "run it"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["answer"] is None
+    assert payload["execution"]["status"] == "executed"
+    assert payload["execution"]["executed"] is True
+    assert payload["execution"]["stdout"] == "hello"
+    assert payload["execution"]["exit_code"] == 0
+
+
+def test_execute_json_moderate_requires_confirmation(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "COMMAND: touch /tmp/mira-json-should-not-exist"
+    code = main(["--json", "--execute", "--no-cheatsheet", "create it"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["execution"]["status"] == "confirmation_required"
+    assert payload["error"]["code"] == 1
+
+
+def test_execute_json_multiple_commands_rejected(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "COMMAND: ls\nCOMMAND: df -h"
+    code = main(["--json", "--execute", "--no-cheatsheet", "do things"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["execution"]["status"] == "ambiguous"
+    assert "multiple" in payload["error"]["message"]
+
+
+def test_execute_no_command_just_answers(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "No command is needed."
+    code = main(["--execute", "--no-cheatsheet", "explain"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "No command is needed." in captured.out
+    assert "Command:" not in captured.out
+
+
+def test_execute_fast_path_is_not_executed(mira_config, capsys) -> None:
+    code = main(["--execute", "How do I check available disk space?"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "(local cheatsheet)" in captured.out
+    assert "Exit code:" not in captured.out
+
+
+def test_execute_bare_first_line_command(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "printf hello\nThis prints hello."
+    code = main(["--execute", "--no-cheatsheet", "print hello"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Command: printf hello" in captured.out
+    assert "This prints hello." in captured.out
+    assert "hello" in captured.out
+
+
+def test_execute_moderate_interactive_accept(mira_config, fake_ollama, tmp_path: Path, monkeypatch, capsys) -> None:
+    target = tmp_path / "confirmed"
+    fake_ollama.chat_text = f"COMMAND: touch {target}"
+    monkeypatch.setattr("mira.output.Console.is_interactive", lambda self: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    code = main(["--execute", "--no-cheatsheet", "create it"])
+    assert code == 0
+    assert target.exists()
+    assert "Risk: moderate" in capsys.readouterr().out
+
+
+def test_execute_moderate_interactive_decline(mira_config, fake_ollama, tmp_path: Path, monkeypatch, capsys) -> None:
+    target = tmp_path / "declined"
+    fake_ollama.chat_text = f"COMMAND: touch {target}"
+    monkeypatch.setattr("mira.output.Console.is_interactive", lambda self: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+    code = main(["--execute", "--no-cheatsheet", "create it"])
+    assert code == 0
+    assert not target.exists()
+    assert "Not executed" in capsys.readouterr().out
+
+
+def test_execute_from_config(mira_config, fake_ollama, capsys) -> None:
+    text = mira_config.read_text(encoding="utf-8")
+    mira_config.write_text(text + "\n[execution]\nenabled = true\n", encoding="utf-8")
+    fake_ollama.chat_text = "COMMAND: printf configured"
+    code = main(["--no-cheatsheet", "run configured"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "configured" in captured.out
+    assert "Command: printf configured" in captured.out
+
+
+def test_yes_without_execute_is_rejected(mira_config, capsys) -> None:
+    assert main(["--yes", "--no-cheatsheet", "hello"]) == 2
+    assert "--execute" in capsys.readouterr().err
+
+
+def test_doctor_ok(mira_config, capsys) -> None:
+    code = main(["--doctor"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "[OK] Ollama API" in out
+    assert "[OK] Model" in out
+    assert "[OK] Knowledge" in out
+
+
+def test_doctor_json(mira_config, capsys) -> None:
+    code = main(["--doctor", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["ok"] is True
+    names = {item["name"] for item in payload["checks"]}
+    assert {"Python", "Ollama API", "Model", "Knowledge"} <= names
+
+
+def test_doctor_missing_model(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.models = []
+    code = main(["--doctor"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "[FAIL] Model" in out
+
+
+def test_doctor_unreachable_ollama(tmp_path: Path, monkeypatch, capsys) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[model]\nname = "test-model:latest"\n\n[ollama]\n'
+        'host = "http://127.0.0.1:1"\ntimeout = 0.5\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MIRA_CONFIG", str(path))
+    code = main(["--doctor"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "[FAIL] Ollama API" in out

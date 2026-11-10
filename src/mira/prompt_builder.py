@@ -68,6 +68,7 @@ def build_messages(
     history: list[dict[str, str]] | None = None,
     num_ctx: int = 4096,
     output_reserve: int = 256,
+    execution_enabled: bool = False,
 ) -> tuple[list[dict[str, str]], PromptDiagnostics]:
     """Build chat messages, dropping reference data then old history if needed."""
     history = list(history or [])
@@ -81,7 +82,7 @@ def build_messages(
         refs: list[ScoredEntry],
         turns: list[dict[str, str]],
     ) -> tuple[list[dict[str, str]], int, int]:
-        system = _system_content(snapshot, refs, diagnostics)
+        system = _system_content(snapshot, refs, diagnostics, execution_enabled)
         messages: list[dict[str, str]] = [{"role": "system", "content": system}]
         messages.extend(turns)
         messages.append({"role": "user", "content": question})
@@ -109,10 +110,27 @@ def build_messages(
     return messages, diagnostics
 
 
+EXECUTION_PROMPT = """\
+EXECUTION MODE IS ON.
+
+If running a command would answer the user, follow this output contract exactly:
+- The first line of your response must be: COMMAND: <one command>
+- The literal word COMMAND: must appear at the start of that line.
+- Put one short explanation after the command line.
+- Do not put the command in a code fence.
+- Do not propose more than one command.
+- Do not claim that you ran it. MIRA will classify it and may ask the user.
+- Prefer safe, read-only diagnostics before state-changing commands.
+- If a pipeline or redirection is needed, write it as one shell command.
+- If no command is needed, answer normally and do not write a COMMAND line.
+"""
+
+
 def _system_content(
     snapshot: ContextSnapshot | None,
     refs: list[ScoredEntry],
     diagnostics: PromptDiagnostics,
+    execution_enabled: bool = False,
 ) -> str:
     parts = [SYSTEM_PROMPT.rstrip()]
     diagnostics.truncated_entry_bodies = 0
@@ -130,6 +148,9 @@ def _system_content(
                 diagnostics.truncated_entry_bodies += 1
             blocks.append(f"### {item.entry.topic}\n{body}")
         parts.append("\n\n".join(blocks))
+    if execution_enabled:
+        # Keep this last so the output contract is the most recent instruction.
+        parts.append(EXECUTION_PROMPT.rstrip())
     return "\n\n".join(parts)
 
 

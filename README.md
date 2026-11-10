@@ -1,11 +1,13 @@
 # MIRA
 
+> Just another vibe coded project.
+
 **M**inimal **I**nference **R**esource **A**ssistant — a fast, local, offline-first
 Linux command-line assistant powered by [Ollama](https://ollama.com/).
 
 MIRA answers one question at a time, explains topics in more depth on request,
-or holds a bounded conversation. It never executes commands. All inference runs
-locally; no cloud API is used.
+or holds a bounded conversation. Command execution is opt-in and guarded by a
+deterministic risk policy. All inference runs locally; no cloud API is used.
 
 ```text
 $ mira where is apache config
@@ -20,6 +22,58 @@ Fedora's package and service are named `httpd`. Debian and Ubuntu use
 (local cheatsheet)
 ```
 
+## What, why, how, when
+
+### What
+
+MIRA is a small Linux assistant that runs against a local Ollama model. It has
+three modes: one-shot answers, longer explanations, and a bounded conversation.
+It can also use curated local cheatsheets for common questions, and with
+`--execute` it can run a single command proposed by the model after a
+deterministic risk check.
+
+It is not a chatbot platform, not an agent framework, and not a cloud wrapper.
+
+### Why
+
+Cloud assistants are convenient, but they send the question, the context, and
+sometimes the answer to someone else's computer. MIRA keeps inference local,
+uses no API keys, and has no runtime dependencies. The deterministic parts —
+environment detection, keyword retrieval, token budgeting, and command risk —
+are ordinary Python so they are inspectable, testable, and predictable.
+
+The project is deliberately small. It favours a clear prompt and a small set of
+curated notes over a large retrieval pipeline. That makes it easy to run on a
+laptop GPU and easy to audit.
+
+### How
+
+- Python 3.12+ with the standard library only.
+- Talks to Ollama over its local HTTP API (`/api/chat`, `/api/tags`, `/api/show`).
+- Builds a fresh environment snapshot for each question: distro, kernel, shell,
+  workspace type, Git branch, and available tools.
+- Retrieves up to three curated Markdown entries with deterministic keyword and
+  alias scoring, filtered by OS.
+- Builds a token-budgeted prompt and streams the response.
+- In execution mode, extracts at most one `COMMAND:` line, classifies it as
+  `safe`, `moderate`, or `destructive`, and follows the policy:
+  safe runs automatically, moderate asks, destructive is refused unless
+  explicitly allowed. Output is shown locally and never sent back to the model.
+- Ships with offline tests, a fake Ollama server, a knowledge validator,
+  `--doctor`, CI, and a clean wheel/sdist release script.
+
+### When
+
+Use MIRA when you want a quick Linux answer from a local model, when you are
+offline, or when you do not want to send the question to a cloud service. It
+fits paths, services, packages, Git basics, and the common Fedora questions
+covered by the bundled cheatsheets. It also fits a local demo of how a small
+LLM assistant can be built with the standard library.
+
+Do not use it for unattended automation, multi-step agent loops, or running
+risky commands without reading them first. The risk classifier is a guard
+rail, not a sandbox.
+
 ## Features
 
 - **One-shot answers** by default: one request, one response, no history.
@@ -31,8 +85,11 @@ Fedora's package and service are named `httpd`. Debian and Ubuntu use
   filtering; common questions can be answered without loading the model.
 - **Thinking disabled** where the model and Ollama support it.
 - **Streaming** output in the terminal; a single JSON object with `--json`.
+- **Opt-in command execution** with deterministic risk classification, shell
+  feature warnings, confirmation prompts, timeouts, and output limits.
+- **`--doctor`** for local installation, Ollama, model, knowledge, GPU, and
+  environment diagnostics.
 - **Zero runtime dependencies**: Python standard library only.
-- **Read-only**: MIRA may suggest commands, but never runs them.
 
 ## Requirements
 
@@ -89,6 +146,8 @@ mira how do I check my IP address
 mira "How do I allow HTTP through firewalld?"
 mira --explain "How does firewalld work?"
 mira -converse "Help me configure Apache"
+mira --execute "How much disk space is free?"
+mira --doctor
 ```
 
 ## Modes
@@ -133,6 +192,76 @@ every turn. `--json` cannot be combined with `--converse`.
 `--explain --converse` starts a conversation that uses explain-mode generation
 limits.
 
+## Command execution
+
+Execution is **off by default**. Enable it for one invocation with `--execute`,
+or persistently with `[execution] enabled = true` in the config. MIRA never
+executes commands from the fast-path cheatsheets; only a command proposed by the
+model in the current response is considered.
+
+```bash
+mira --execute "How much disk space is free?"
+mira --execute --yes "Create /tmp/mira-demo"
+mira --execute --allow-destructive "Remove /tmp/mira-demo"
+```
+
+The model is instructed to propose at most one command:
+
+```text
+COMMAND: df -h
+```
+
+MIRA extracts it, removes the marker from the displayed answer, classifies it,
+and then follows this policy:
+
+| Risk | Examples | Default behaviour |
+|---|---|---|
+| `safe` | `df -h`, `git status`, `systemctl status sshd`, `journalctl -u ollama` | Runs automatically when execution is enabled |
+| `moderate` | `systemctl restart sshd`, `dnf install`, `touch`, `curl` | Shows the command and asks for confirmation |
+| `destructive` | `rm`, `dd`, `mkfs`, `chmod`, `systemctl stop`, `sudo ...` | Refused unless `--allow-destructive` is also given, then still confirmed |
+
+`--yes` skips confirmation for `safe` and `moderate` commands. It does **not**
+override the destructive guard; destructive commands need both
+`--allow-destructive` and either an interactive confirmation or `--yes`.
+
+Shell features such as pipes, redirection, command substitution, and globs are
+detected. A command using them is run through `bash -lc`, labelled with the
+detected features, and always requires confirmation; it never auto-runs. Command
+substitution and elevated commands are treated as destructive.
+
+Execution details:
+
+- Commands run in the current directory with stdin set to `/dev/null`.
+- Interactive programs and password prompts (including most `sudo` uses) are not
+  supported; `sudo` is classified as destructive.
+- Default timeout is 30 seconds and output is capped at 20,000 characters per
+  stream. Both are configurable under `[execution]`.
+- Command output is shown locally and is **never sent back to the model**.
+- `--execute` disables streaming for that turn so the proposed command can be
+  parsed and the answer cleaned before display.
+- In a non-interactive context (piped output, `--json`, or no TTY), a command
+  that needs confirmation is not executed and MIRA exits with code 1 unless
+  `--yes` (and, for destructive commands, `--allow-destructive`) is supplied.
+- A command's own non-zero exit code does not change MIRA's exit code; the exit
+  code is reported in the output and in the JSON `execution` object.
+
+`--json --execute` adds an `execution` object with `status`, `command`, `risk`,
+`reason`, `shell`, `shell_features`, `executed`, `exit_code`, `stdout`,
+`stderr`, `timed_out`, `truncated`, and `duration_ms`. A refusal or required
+confirmation also populates the top-level `error` and exits with code 1.
+
+## Diagnostics
+
+```bash
+mira --doctor
+mira --doctor --json
+```
+
+`--doctor` checks Python, the config file, the Ollama binary and API, the
+configured model, thinking support, knowledge entries, Git, GPU visibility,
+environment detection, and whether execution is enabled. Required failures exit
+with code 1; warnings do not. It never downloads models or changes config.
+
 ## CLI reference
 
 ```text
@@ -147,6 +276,10 @@ mira [options] [question ...]
 | `--list-models` | List installed Ollama models |
 | `--set-model MODEL` | Validate and persist a new default model |
 | `--show-config` | Print the effective configuration and path |
+| `-execute`, `--execute` | Allow one model-proposed command to run under the risk policy |
+| `--yes` | Skip confirmation for safe/moderate commands (destructive still needs `--allow-destructive`) |
+| `--allow-destructive` | Permit destructive commands; still confirmed unless `--yes` |
+| `--doctor` | Run local installation diagnostics |
 | `--debug` | Timing, context, retrieval, and token diagnostics on stderr |
 | `--no-context` | Disable environment detection |
 | `--no-cheatsheet` | Disable local knowledge retrieval |
@@ -201,6 +334,12 @@ max_messages = 12
 
 [retrieval]
 max_results = 3
+
+[execution]
+enabled = false
+timeout = 30
+max_output = 20000
+allow_destructive = false
 ```
 
 Invalid values produce a clear error and exit code 2. `--set-model` validates
@@ -275,6 +414,17 @@ the match is unique, the query is short (≤ 20 words), the entry is marked
 direct, and one-shot mode is active. Such answers are labelled
 `(local cheatsheet)`. Ties always fall back to the model.
 
+Validate the repository knowledge and its packaged copy with:
+
+```bash
+python scripts/validate_knowledge.py
+```
+
+The validator reports missing keywords, duplicate topics, invalid OS tokens,
+oversized bodies, direct entries containing risky commands, and differences
+between `knowledge/` and `src/mira/knowledge/`. Retrieval quality is covered by
+`tests/test_retrieval_eval.py`.
+
 ## JSON output
 
 ```bash
@@ -308,20 +458,44 @@ mira --json "How do I check disk space?"
   },
   "usage": {"prompt_tokens": 334, "completion_tokens": 2},
   "timing": {"total_ms": 1485.2, "ttft_ms": 620.1},
+  "execution": null,
   "error": null
+}
+```
+
+With `--execute`, `execution` is an object:
+
+```json
+{
+  "status": "executed",
+  "command": "df -h",
+  "risk": "safe",
+  "reason": "read-only diagnostic command",
+  "shell": false,
+  "shell_features": [],
+  "executed": true,
+  "exit_code": 0,
+  "stdout": "Filesystem ...",
+  "stderr": "",
+  "timed_out": false,
+  "truncated": false,
+  "duration_ms": 12.4,
+  "message": null
 }
 ```
 
 `--json` always emits exactly one object and never streams. Debug output goes to
 stderr, so stdout remains valid JSON. On failure, `answer` is `null` and `error`
-contains `code`, `message`, and `hint`.
+contains `code`, `message`, and `hint`. A command that needs confirmation or is
+refused is not executed; `execution.status` explains why and the process exits
+with code 1.
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Generic failure or empty model response |
+| `1` | Generic failure, empty model response, or a proposed command that was refused/needs confirmation |
 | `2` | Usage or configuration error |
 | `3` | Ollama unreachable or not running |
 | `4` | Requested model is not installed |
@@ -335,6 +509,7 @@ User-facing errors start with `MIRA:` and never print a traceback unless
 The default suite is offline and uses a fake Ollama HTTP server:
 
 ```bash
+python scripts/validate_knowledge.py
 pytest
 ```
 
@@ -346,6 +521,18 @@ MIRA_INTEGRATION=1 pytest -m integration
 
 This runs the ten acceptance questions twice: once through the deterministic
 fast path and once through the full Ollama pipeline with retrieval disabled.
+
+Build a wheel and sdist, then smoke-test the wheel in a clean virtual
+environment:
+
+```bash
+./scripts/release.sh
+```
+
+The script validates knowledge, runs the offline tests, builds both artifacts,
+installs the wheel without runtime dependencies, and checks that the packaged
+fast path still answers a disk-space question. CI runs the same offline checks
+on Python 3.12, 3.13, and 3.14 (see `.github/workflows/ci.yml`).
 
 ## Benchmark
 
@@ -376,17 +563,26 @@ src/mira/
 ├── prompt_builder.py  # system prompt and token budget
 ├── ollama_client.py   # /api/chat, /api/tags, /api/show
 ├── conversation.py    # bounded history and REPL
-├── output.py          # streaming, ANSI, JSON, debug
+├── execution.py       # command extraction, risk policy, safe execution
+├── knowledge_validation.py # knowledge and packaged-copy checks
+├── output.py          # streaming, ANSI, JSON, debug, execution display
 ├── errors.py          # exception types and exit codes
 └── knowledge/         # packaged cheatsheets
 ```
 
-Design rules: standard library only, deterministic Python for facts and
-retrieval, minimal prompts, no execution engine, and no agent framework.
+Design rules: standard library only, deterministic Python for facts, retrieval,
+and command risk, minimal prompts, explicit opt-in execution, and no agent
+framework. Command output is never fed back into the model.
 
 ## Limitations
 
-- MIRA is a **read-only assistant**. It never executes suggested commands.
+- Command execution is **opt-in** and limited to one model-proposed command per
+  turn. It is not an autonomous agent and does not plan or chain commands.
+- Risk classification is deterministic and conservative, not a sandbox. It can
+  miss dangerous intent inside a command it considers moderate. Review every
+  command before confirming, and do not use `--yes` casually.
+- Interactive commands, password prompts, and most `sudo` workflows are not
+  supported because stdin is `/dev/null`.
 - Thinking controls depend on the model and Ollama version. When unsupported,
   MIRA omits the parameter rather than pretending reasoning is disabled.
 - `num_ctx = 4096` is deliberate for a 6 GB GPU. Very long questions or
@@ -401,9 +597,10 @@ retrieval, minimal prompts, no execution engine, and no agent framework.
 
 ## Roadmap (not implemented)
 
-Read-only tools, explicit command execution with confirmation and risk
-classification, and longer-term assistant features are deliberately out of
-scope for this release. No autonomous tool calling exists.
+Longer-term assistant features are deliberately out of scope for this release.
+There is no autonomous tool calling, multi-command planning, background
+execution, or sandboxing. Command execution remains explicit and
+confirmation-oriented.
 
 ## License
 

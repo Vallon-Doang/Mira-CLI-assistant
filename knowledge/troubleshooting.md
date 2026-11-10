@@ -140,7 +140,7 @@ Or:
 journalctl -k --no-pager
 ```
 
-## Diagnose a failed service
+## Find failed systemd services
 ---
 os: linux
 keywords: failed, service, failure, systemd, status, journalctl, diagnose
