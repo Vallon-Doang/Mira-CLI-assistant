@@ -111,6 +111,11 @@ def build_parser() -> MiraArgumentParser:
         action="store_true",
         help="permit destructive commands (still confirmed unless --yes is also given)",
     )
+    parser.add_argument(
+        "--confirm-safe",
+        action="store_true",
+        help="ask before running safe commands instead of running them automatically",
+    )
     parser.add_argument("--doctor", action="store_true", help="run local installation diagnostics")
     parser.add_argument("--debug", action="store_true", help="show timing and diagnostics on stderr")
     parser.add_argument("--no-context", action="store_true", help="disable environment detection")
@@ -188,9 +193,10 @@ def _run(args: argparse.Namespace, console: Console) -> int:
         cfg.behavior.cheatsheet = False
 
     execution_enabled = args.execute or cfg.execution.enabled
-    if (args.yes or args.allow_destructive) and not execution_enabled:
+    if (args.yes or args.allow_destructive or args.confirm_safe) and not execution_enabled:
         raise UsageError(
-            "--yes and --allow-destructive require --execute or [execution] enabled = true."
+            "--yes, --allow-destructive, and --confirm-safe require --execute "
+            "or [execution] enabled = true."
         )
 
     client = OllamaClient(cfg.ollama.host, timeout=cfg.ollama.timeout)
@@ -550,7 +556,8 @@ def _execute_command(
         return ExecutionResult(status=STATUS_NO_COMMAND)
 
     plan = classify(command)
-    if plan.auto_run:
+    confirm_safe = args.confirm_safe or cfg.execution.confirm_safe
+    if plan.auto_run and not confirm_safe:
         return execute_plan(
             plan,
             timeout=cfg.execution.timeout,
@@ -736,7 +743,8 @@ def _doctor(cfg: Config, client: OllamaClient, console: Console) -> int:
         "ok" if cfg.execution.enabled else "warn",
         f"enabled={_yes_no(cfg.execution.enabled)}, "
         f"timeout={cfg.execution.timeout:g}s, "
-        f"destructive={_yes_no(cfg.execution.allow_destructive)}",
+        f"destructive={_yes_no(cfg.execution.allow_destructive)}, "
+        f"confirm_safe={_yes_no(cfg.execution.confirm_safe)}",
         None
         if cfg.execution.enabled
         else "Use --execute per invocation or set [execution] enabled = true.",
@@ -901,6 +909,7 @@ def _config_dict(cfg: Config) -> dict:
             "timeout": cfg.execution.timeout,
             "max_output": cfg.execution.max_output,
             "allow_destructive": cfg.execution.allow_destructive,
+            "confirm_safe": cfg.execution.confirm_safe,
         },
     }
 

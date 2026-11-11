@@ -52,8 +52,9 @@ package data; `~/.config/mira/knowledge/*.md` overrides bundled entries.
   (`urllib`, `tomllib`, `http.server` in tests). `pytest` is dev-only.
 - Never add LangChain/CrewAI/vector databases/embeddings. No cloud APIs.
 - Command execution is opt-in (`--execute` or `[execution] enabled = true`).
-  Safe read-only commands may auto-run; everything else needs confirmation.
-  Destructive commands additionally require `--allow-destructive`. Shell
+  Safe read-only commands may auto-run unless `[execution] confirm_safe = true`;
+  everything else needs confirmation. Destructive commands additionally require
+  `--allow-destructive`. Shell
   features use `bash -lc` only after a warning and confirmation. Never feed
   command output back to the model.
 - Never send environment variable values, SSH keys, git remotes, or absolute
@@ -93,9 +94,10 @@ the command or path first. Add a `Warning:` line for risky actions.
   unreachable, 4 model missing, 130 interrupted.
 - User-facing errors start with `MIRA:` and never include tracebacks unless
   `--debug`.
-- Execution: safe read-only commands auto-run; moderate commands confirm;
-  destructive commands need `--allow-destructive`; `--yes` skips safe/moderate
-  confirmation only. Never parse commands from fast-path cheatsheets.
+- Execution: safe read-only commands auto-run unless `confirm_safe` is on;
+  moderate commands confirm; destructive commands need `--allow-destructive`;
+  `--yes` skips safe/moderate confirmation only. Never parse commands from
+  fast-path cheatsheets.
 - Keep responses under ~100 words in one-shot mode; explain mode may be longer.
 - Tests must not require Ollama unless marked `integration`.
 - Prefer deterministic Python over LLM reasoning for environment facts,

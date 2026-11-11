@@ -25,6 +25,7 @@ def test_defaults_are_created(tmp_path: Path) -> None:
     assert cfg.execution.enabled is False
     assert cfg.execution.timeout == 30.0
     assert cfg.execution.max_output == 20_000
+    assert cfg.execution.confirm_safe is False
     assert cfg.path == path
 
 
@@ -67,7 +68,7 @@ def test_execution_settings_load_and_render(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text(
         "[execution]\nenabled = true\ntimeout = 45\nmax_output = 5000\n"
-        "allow_destructive = true\n",
+        "allow_destructive = true\nconfirm_safe = true\n",
         encoding="utf-8",
     )
     cfg = load_config(path)
@@ -75,9 +76,11 @@ def test_execution_settings_load_and_render(tmp_path: Path) -> None:
     assert cfg.execution.timeout == 45.0
     assert cfg.execution.max_output == 5000
     assert cfg.execution.allow_destructive is True
+    assert cfg.execution.confirm_safe is True
     rendered = cfg.render()
     assert "[execution]" in rendered
     assert "timeout = 45" in rendered
+    assert "confirm_safe = true" in rendered
 
 
 def test_invalid_execution_timeout(tmp_path: Path) -> None:

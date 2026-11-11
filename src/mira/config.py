@@ -52,6 +52,7 @@ enabled = false
 timeout = 30
 max_output = 20000
 allow_destructive = false
+confirm_safe = false
 """
 
 
@@ -98,6 +99,7 @@ class ExecutionConfig:
     timeout: float = 30.0
     max_output: int = 20_000
     allow_destructive: bool = False
+    confirm_safe: bool = False
 
 
 @dataclass
@@ -142,6 +144,7 @@ class Config:
             f"timeout = {_fmt_number(self.execution.timeout)}\n"
             f"max_output = {self.execution.max_output}\n"
             f"allow_destructive = {_toml_bool(self.execution.allow_destructive)}\n"
+            f"confirm_safe = {_toml_bool(self.execution.confirm_safe)}\n"
         )
 
 
@@ -211,6 +214,7 @@ def load_config(path: Path | None = None, create: bool = True) -> Config:
                 timeout=_float(data, "execution", "timeout", 30.0),
                 max_output=_int(data, "execution", "max_output", 20_000),
                 allow_destructive=_bool(data, "execution", "allow_destructive", False),
+                confirm_safe=_bool(data, "execution", "confirm_safe", False),
             ),
             path=cfg_path,
         )

@@ -244,6 +244,16 @@ a curated alias; a weak match such as only the OS name falls back to the model.
 Override the topic in `~/.config/mira/knowledge/` or use `--no-cheatsheet` to
 force the model.
 
+## I want to run a command shown in a cheatsheet answer
+
+MIRA never executes commands from fast-path cheatsheets. To let the model
+propose the command instead, rerun with `--no-cheatsheet --execute`; add
+`--confirm-safe` if you want a yes/no prompt even for safe commands:
+
+```bash
+mira --no-cheatsheet --execute --confirm-safe "check storage usage"
+```
+
 ## Git information is missing
 
 ```bash

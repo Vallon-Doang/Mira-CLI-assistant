@@ -201,9 +201,14 @@ model in the current response is considered.
 
 ```bash
 mira --execute "How much disk space is free?"
+mira --execute --confirm-safe "How much disk space is free?"
 mira --execute --yes "Create /tmp/mira-demo"
 mira --execute --allow-destructive "Remove /tmp/mira-demo"
 ```
+
+Use `--confirm-safe` (or `[execution] confirm_safe = true`) if you want a
+`[y/N]` prompt even for safe read-only commands. Without it, safe commands run
+automatically once execution is enabled.
 
 The model is instructed to propose at most one command:
 
@@ -216,13 +221,14 @@ and then follows this policy:
 
 | Risk | Examples | Default behaviour |
 |---|---|---|
-| `safe` | `df -h`, `git status`, `systemctl status sshd`, `journalctl -u ollama` | Runs automatically when execution is enabled |
+| `safe` | `df -h`, `git status`, `systemctl status sshd`, `journalctl -u ollama` | Runs automatically when execution is enabled, unless `confirm_safe` is on |
 | `moderate` | `systemctl restart sshd`, `dnf install`, `touch`, `curl` | Shows the command and asks for confirmation |
 | `destructive` | `rm`, `dd`, `mkfs`, `chmod`, `systemctl stop`, `sudo ...` | Refused unless `--allow-destructive` is also given, then still confirmed |
 
 `--yes` skips confirmation for `safe` and `moderate` commands. It does **not**
 override the destructive guard; destructive commands need both
 `--allow-destructive` and either an interactive confirmation or `--yes`.
+`--confirm-safe` is ignored when `--yes` is given.
 
 Shell features such as pipes, redirection, command substitution, and globs are
 detected. A command using them is run through `bash -lc`, labelled with the
@@ -279,6 +285,7 @@ mira [options] [question ...]
 | `-execute`, `--execute` | Allow one model-proposed command to run under the risk policy |
 | `--yes` | Skip confirmation for safe/moderate commands (destructive still needs `--allow-destructive`) |
 | `--allow-destructive` | Permit destructive commands; still confirmed unless `--yes` |
+| `--confirm-safe` | Ask before running safe commands instead of running them automatically |
 | `--doctor` | Run local installation diagnostics |
 | `--debug` | Timing, context, retrieval, and token diagnostics on stderr |
 | `--no-context` | Disable environment detection |
@@ -340,6 +347,7 @@ enabled = false
 timeout = 30
 max_output = 20000
 allow_destructive = false
+confirm_safe = false
 ```
 
 Invalid values produce a clear error and exit code 2. `--set-model` validates

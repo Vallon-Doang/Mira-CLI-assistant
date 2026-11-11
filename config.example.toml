@@ -38,3 +38,5 @@ timeout = 30
 max_output = 20000
 # Destructive commands still need --allow-destructive unless this is true.
 allow_destructive = false
+# Ask before running safe commands instead of running them automatically.
+confirm_safe = false

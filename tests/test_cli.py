@@ -26,7 +26,7 @@ def test_single_dash_modes() -> None:
 
 def test_version(capsys) -> None:
     assert main(["--version"]) == 0
-    assert "mira 0.2.1" in capsys.readouterr().out
+    assert "mira 0.3.0" in capsys.readouterr().out
 
 
 def test_no_question_on_tty(mira_config, monkeypatch, capsys) -> None:
@@ -245,6 +245,56 @@ def test_execute_safe_command_auto_runs(mira_config, fake_ollama, capsys) -> Non
     assert "hello" in captured.out
     assert "Exit code: 0" in captured.out
     assert fake_ollama.last_chat_payload["stream"] is False
+
+
+def test_execute_safe_with_confirm_safe_interactive_accept(
+    mira_config, fake_ollama, monkeypatch, capsys
+) -> None:
+    fake_ollama.chat_text = "COMMAND: printf confirmed"
+    monkeypatch.setattr("mira.output.Console.is_interactive", lambda self: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    code = main(["--execute", "--confirm-safe", "--no-cheatsheet", "run it"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "confirmed" in captured.out
+    assert "Exit code: 0" in captured.out
+
+
+def test_execute_safe_with_confirm_safe_interactive_decline(
+    mira_config, fake_ollama, monkeypatch, capsys
+) -> None:
+    fake_ollama.chat_text = "COMMAND: printf declined"
+    monkeypatch.setattr("mira.output.Console.is_interactive", lambda self: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+    code = main(["--execute", "--confirm-safe", "--no-cheatsheet", "run it"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Not executed" in captured.out
+    assert "Exit code:" not in captured.out
+
+
+def test_execute_safe_with_confirm_safe_needs_tty(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "COMMAND: printf pending"
+    code = main(["--execute", "--confirm-safe", "--no-cheatsheet", "run it"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "confirmation" in captured.out
+
+
+def test_execute_safe_confirm_safe_yes_overrides(mira_config, fake_ollama, capsys) -> None:
+    fake_ollama.chat_text = "COMMAND: printf overridden"
+    code = main(
+        ["--execute", "--confirm-safe", "--yes", "--no-cheatsheet", "run it"]
+    )
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "overridden" in captured.out
+    assert "Exit code: 0" in captured.out
+
+
+def test_confirm_safe_without_execute_is_rejected(mira_config, capsys) -> None:
+    assert main(["--confirm-safe", "--no-cheatsheet", "hello"]) == 2
+    assert "--execute" in capsys.readouterr().err
 
 
 def test_execute_moderate_with_yes(mira_config, fake_ollama, tmp_path: Path, capsys) -> None:
