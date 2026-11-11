@@ -188,7 +188,7 @@ If the command is missing, install `lm_sensors` with `sudo dnf install lm_sensor
 ---
 os: linux
 keywords: oom, out of memory, killed, memory, kernel, process
-aliases: oom killer, out of memory, process killed
+aliases: oom killer, oom kill, check oom kill, out of memory, process killed
 direct: true
 ---
 ```bash

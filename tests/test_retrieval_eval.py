@@ -48,6 +48,10 @@ TOPIC_CASES = [
     ("How do I follow logs live?", "Follow logs live"),
     ("How do I check hardware temperature?", "Check hardware temperatures"),
     ("How do I find a running process?", "Find a running process"),
+    ("Can you fix the clock? I'm running Fedora linux", "Set the system clock and timezone"),
+    ("How do I set the timezone?", "Set the system clock and timezone"),
+    ("My clock is wrong", "Set the system clock and timezone"),
+    ("How do I sync time with NTP?", "Set the system clock and timezone"),
 ]
 
 
@@ -126,3 +130,34 @@ def test_fast_path_rejects_non_direct_entry(entries) -> None:
     assert scored
     assert scored[0].entry.direct is False
     assert direct_answer(query, scored) is None
+
+
+def test_fast_path_answers_clock_query(entries) -> None:
+    query = "Can you fix the clock? I'm running Fedora linux"
+    scored = retrieve(query, entries, os_hint="fedora")
+    direct = direct_answer(query, scored)
+    assert direct is not None
+    assert direct.entry.topic == "Set the system clock and timezone"
+
+
+def test_fast_path_rejects_generic_os_match(entries) -> None:
+    query = "Can you fix my printer? I'm running Fedora linux"
+    scored = retrieve(query, entries, os_hint="fedora")
+    assert scored
+    assert scored[0].entry.topic == "Fedora version"
+    assert direct_answer(query, scored) is None
+
+
+def test_fast_path_rejects_generic_status_query(entries) -> None:
+    query = "How do I check status?"
+    scored = retrieve(query, entries, os_hint="fedora")
+    assert scored
+    assert direct_answer(query, scored) is None
+
+
+def test_fast_path_accepts_alias_synonyms(entries) -> None:
+    query = "How do I inspect systemd logs?"
+    scored = retrieve(query, entries, os_hint="fedora")
+    direct = direct_answer(query, scored)
+    assert direct is not None
+    assert direct.entry.topic == "View service logs"

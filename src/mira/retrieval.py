@@ -195,7 +195,12 @@ def direct_answer(
     query: str,
     scored: list[ScoredEntry],
 ) -> ScoredEntry | None:
-    """Return a curated answer only when the match is unambiguous."""
+    """Return a curated answer only when the match is unambiguous.
+
+    A single generic keyword is not enough.  The query must cover the entry's
+    topic words or match one of its aliases; otherwise a question like "fix my
+    printer on Fedora" must not be answered with the "Fedora version" entry.
+    """
     if not scored:
         return None
     top = scored[0]
@@ -207,7 +212,28 @@ def direct_answer(
         return None
     if len(query.split()) > DIRECT_MAX_WORDS:
         return None
+    if not _topic_covered(query, top.entry):
+        return None
     return top
+
+
+def _topic_covered(query: str, entry: Entry) -> bool:
+    text = _normalize(query)
+    tokens = {token for token in text.split() if len(token) >= 2}
+    topic_tokens = [
+        token
+        for token in _normalize(entry.topic).split()
+        if token not in _STOPWORDS and len(token) >= 2
+    ]
+    if not topic_tokens:
+        return True
+    if all(token in tokens for token in topic_tokens):
+        return True
+    # Aliases are curated synonyms, so they may stand in for a topic word.
+    return any(
+        phrase and _contains_phrase(text, _normalize(phrase))
+        for phrase in entry.aliases
+    )
 
 
 def render_direct(entry: Entry) -> str:

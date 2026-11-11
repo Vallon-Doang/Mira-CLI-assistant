@@ -239,8 +239,10 @@ the file starts entries with `## Topic`, followed by a `---` metadata block.
 
 Entries are tagged `os: fedora`, `os: linux`, or `os: any`. Fedora-specific
 paths are filtered on other distributions, but generic commands may still
-differ. Override the topic in `~/.config/mira/knowledge/` or use
-`--no-cheatsheet` to force the model.
+differ. Fast-path answers require the query to cover the entry's topic or match
+a curated alias; a weak match such as only the OS name falls back to the model.
+Override the topic in `~/.config/mira/knowledge/` or use `--no-cheatsheet` to
+force the model.
 
 ## Git information is missing
 

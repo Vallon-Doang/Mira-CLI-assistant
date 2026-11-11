@@ -26,7 +26,7 @@ def test_single_dash_modes() -> None:
 
 def test_version(capsys) -> None:
     assert main(["--version"]) == 0
-    assert "mira 0.2.0" in capsys.readouterr().out
+    assert "mira 0.2.1" in capsys.readouterr().out
 
 
 def test_no_question_on_tty(mira_config, monkeypatch, capsys) -> None:

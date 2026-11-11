@@ -72,7 +72,7 @@ Then inspect a failed unit with `systemctl status NAME` and `journalctl -xeu NAM
 ---
 os: linux
 keywords: logs, journalctl, journal, service, systemd, log, errors
-aliases: service logs, view logs, journalctl service
+aliases: service logs, view logs, journalctl service, systemd logs, inspect systemd logs
 direct: true
 ---
 ```bash

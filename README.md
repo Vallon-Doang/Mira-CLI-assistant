@@ -411,8 +411,10 @@ Verify: `sudo apachectl configtest`
 
 `direct: true` allows the fast path. MIRA answers without the model only when
 the match is unique, the query is short (≤ 20 words), the entry is marked
-direct, and one-shot mode is active. Such answers are labelled
-`(local cheatsheet)`. Ties always fall back to the model.
+direct, and one-shot mode is active. The query must also cover the entry's
+topic words or match a curated alias, so a generic match such as "Fedora" does
+not answer an unrelated question. Such answers are labelled
+`(local cheatsheet)`. Ties and weak matches always fall back to the model.
 
 Validate the repository knowledge and its packaged copy with:
 
